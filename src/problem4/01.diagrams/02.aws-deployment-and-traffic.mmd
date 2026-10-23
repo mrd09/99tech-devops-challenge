@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph GH["GitHub Actions — separate backend/frontend deployment jobs"]
+        RUN["Each protected job: environment / approval<br/>Artifact verification + release-gate.py"]
+        TOKEN["Each job’s GitHub OIDC token<br/>aud: sts.amazonaws.com<br/>Exact application/environment subject"]
+        RUN --> TOKEN
+    end
+    subgraph AWS["Assumed AWS resources — one environment, separate staging/production resources"]
+        STS["IAM OIDC trust + STS<br/>Exchange token for temporary credentials"]
+        BR["Backend deployment role"]
+        FR["Frontend deployment role"]
+        REV[("Versioned S3 artifact bucket<br/>bundle.tgz + explicit VersionId")]
+        CD["CodeDeploy + service role<br/>OneAtATime, alarms and prior-revision recovery"]
+        ALB["HTTPS ALB<br/>Healthy instance targets"]
+        EC2["EC2 ASG: at least two instances across AZs<br/>CodeDeploy agent / hooks, Node 24 systemd<br/>Instance role reads bundle and runtime secret"]
+        SECRET[("Secrets Manager<br/>Environment-specific runtime JSON")]
+        WEB[("Private versioned SPA S3<br/>Release assets first, root HTML last")]
+        CF["CloudFront + OAC<br/>SPA rewrite excludes API/assets<br/>HTML revalidation, MinTTL 0"]
+        STS -->|"Backend job only"| BR
+        STS -->|"Frontend job only"| FR
+        BR -->|"Upload verified revision"| REV
+        BR -->|"Create / monitor deployment"| CD
+        REV -->|"Versioned application bundle"| EC2
+        CD -->|"Lifecycle hooks + readiness / exact commit"| EC2
+        CD -. "Drain / restore target traffic" .-> ALB
+        ALB -->|"API traffic to ready targets"| EC2
+        EC2 -->|"Instance IAM role"| SECRET
+        FR -->|"Publish / restore entrypoint"| WEB
+        FR -. "Invalidate HTML" .-> CF
+        CF -->|"Read static objects via OAC"| WEB
+        CF -->|"Uncached /api and /api/*"| ALB
+    end
+    TOKEN -->|"AssumeRoleWithWebIdentity"| STS
+    BROWSER["Browser"] -->|"HTTPS"| CF
+    RUN -. "Public backend readiness / commit checks" .-> ALB
+    RUN -. "Public index / sample-asset hash checks" .-> CF

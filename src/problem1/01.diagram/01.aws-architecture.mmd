@@ -1,0 +1,34 @@
+flowchart TB
+    U[Browser clients] -->|Static HTTPS| WEB[CloudFront + private S3]
+    U -->|Login / MFA| ID[Cognito]
+    U -->|HTTPS / WSS| EDGE[ALB + ACM + WAF]
+    subgraph VPC[Private VPC: ECS services across three AZs]
+        API[Trading API: 6 tasks]
+        TRADE[Matching + settlement: 3 tasks]
+        PROJ[Projection + audit: 3 tasks]
+        WS[WebSocket gateways: 3 tasks]
+        CACHE[Valkey primary + replica]
+    end
+    DB[(DynamoDB on-demand<br/>Financial records, commands and book<br/>Outbox / separate public projections)]
+    BR[Streams to Lambda<br/>Publisher + scheduled outbox repair]
+    Q[SQS Standard<br/>Separate command and event queues + DLQs]
+    AUDIT[S3 protected audit exports]
+    EDGE -->|REST| API
+    EDGE -->|WS upgrade| WS
+    API -->|Reserve / persist / strong private reads| DB
+    DB -. Outbox records .-> BR
+    BR -->|At-least-once wake-ups| Q
+    Q -->|Command wake-ups| TRADE
+    TRADE <-->|Fenced ordered work / atomic fills| DB
+    Q -->|Event wake-ups| PROJ
+    DB <-->|Read events / write projection tables| PROJ
+    PROJ -->|Versioned public views| CACHE
+    API -->|Public snapshots| CACHE
+    CACHE -->|Ephemeral public pub/sub| WS
+    PROJ -->|Reconciled exports| AUDIT
+    classDef compute fill:#e8f0fe,stroke:#2563eb,color:#172554;
+    classDef data fill:#e7f6ed,stroke:#15803d,color:#14532d;
+    classDef edge fill:#fff3e0,stroke:#d97706,color:#78350f;
+    class API,TRADE,PROJ,WS,BR compute;
+    class DB,CACHE,Q,AUDIT data;
+    class WEB,ID,EDGE edge;

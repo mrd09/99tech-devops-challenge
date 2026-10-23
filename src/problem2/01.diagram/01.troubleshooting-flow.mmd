@@ -1,0 +1,21 @@
+flowchart TB
+    ALERT["99% storage alert"] --> TEAM["Step 1: two responders<br/>A protects traffic / B collects evidence"]
+    TEAM --> TYPE{"Step 2: affected mount<br/>Which limiting layer?"}
+    TYPE -->|"I/O errors or read-only"| FAULT["Fail over / preserve disk<br/>Replace or repair offline"]
+    TYPE -->|"Inodes, quota or size mismatch"| GLOBAL["Step 6: scoped scan<br/>Inodes / mount / storage layers"]
+    TYPE -->|"Filesystem bytes"| NGINX["Step 3: NGINX writers<br/>Logs / temporary files / cache"]
+    NGINX -->|"Explained"| RECOVER["Control the identified producer<br/>Preserve / reclaim selectively"]
+    NGINX -->|"Unexplained"| OPEN["Step 4: deleted-open files<br/>Classify held logs vs active spool"]
+    OPEN -->|"Explained"| RECOVER
+    OPEN -->|"Unexplained"| OS["Step 5: OS writers<br/>Journal / agent queues / artifacts"]
+    OS -->|"Explained"| RECOVER
+    OS -->|"Unexplained"| GLOBAL
+    GLOBAL --> RECOVER
+    RECOVER --> VERIFY{"Step 7: recovery gates pass?<br/>Routes / capacity / logs / growth"}
+    FAULT --> VERIFY
+    VERIFY -->|"Yes: gradual traffic return"| PREVENT["Step 8: prevention<br/>Retention / alerts / redundancy"]
+    VERIFY -. "No: continue recovery" .-> TYPE
+    classDef decision fill:#fff3e0,stroke:#d97706,color:#78350f;
+    classDef recovery fill:#e7f6ed,stroke:#15803d,color:#14532d;
+    class TYPE decision;
+    class RECOVER,VERIFY,PREVENT recovery;

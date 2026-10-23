@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::ARTIFACT_BUCKET/backend/backend-ENVIRONMENT/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:backend/ENVIRONMENT/runtime-SUFFIX"
+    }
+  ]
+}

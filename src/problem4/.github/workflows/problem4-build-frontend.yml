@@ -1,0 +1,51 @@
+name: Problem 4 reusable frontend build
+
+on:
+  workflow_call:
+    outputs:
+      artifact:
+        description: Checksummed frontend artifact from this release run
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+    outputs:
+      artifact: ${{ steps.identity.outputs.artifact }}
+    steps:
+      - name: Name the immutable artifact
+        id: identity
+        run: echo "artifact=frontend-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check required application interface
+        run: python3 tasks/problem4/scripts/package.py contract frontend
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - name: Install, check, audit and build
+        working-directory: apps/frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm audit --audit-level=high
+          npm run build -- --base="/releases/${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/"
+          npm sbom --sbom-format cyclonedx --omit=dev > sbom.json
+      - name: Package once
+        run: python3 tasks/problem4/scripts/package.py build frontend
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ steps.identity.outputs.artifact }}
+          path: output/frontend/*
+          if-no-files-found: error
+          retention-days: 30

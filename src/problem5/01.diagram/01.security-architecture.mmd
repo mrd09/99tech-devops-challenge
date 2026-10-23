@@ -1,0 +1,52 @@
+flowchart TB
+    U["Browser clients"]
+    WEB["H - CloudFront + private S3/OAC<br/>TLS / block public origin / headers"]
+    ID["H - Cognito<br/>MFA / protected recovery"]
+    EDGE["H - ALB + ACM + WAF<br/>TLS / HTTP rules / abuse limits"]
+
+    subgraph VPC["Production VPC - three AZs / no public task IPs"]
+        APP["H - ECS Fargate / task roles + SGs<br/>API 6-30 / trading 3-10<br/>Projection 3-12 / WS 3-9<br/>Non-root / read-only / AWS endpoints<br/>Workers have no Internet route"]
+        CACHE["H - Valkey primary + replica<br/>TLS / ACLs / public data only"]
+    end
+
+    DB[("H - DynamoDB financial tables<br/>Orders / balances / book / outbox<br/>Scoped IAM / KMS / PITR")]
+    VIEW[("H - Public projection tables<br/>Projector write role")]
+    BR["H - Streams / Lambda + repair<br/>Retained outbox / scoped IAM"]
+    Q["H - SQS Standard commands + events<br/>Scoped IAM / encryption / DLQs"]
+    SECRETS["H - Secrets Manager / KMS<br/>Per-role access / refresh on rotation"]
+
+    CI["+ GitHub CI gates + AWS OIDC<br/>CodeQL / secrets / dependencies / Trivy<br/>SBOM / verified ECR digest<br/>Approval / canary / safe handover / rollback"]
+
+    subgraph SECURITY["+ Security / log / backup account - separate from production"]
+        LOG["+ CloudTrail / redacted logs<br/>S3 audit exports / Object Lock<br/>No production retention bypass"]
+        OPS["+ GuardDuty / CloudWatch / on-call<br/>Revoke / isolate / pause markets"]
+        BACKUP["+ AWS Backup protected copies<br/>Recovery Region / recovery keys<br/>Restore + fence + reconcile"]
+    end
+
+    KEEP["K - Financial source of truth<br/>202 after commit / async execution<br/>Cache never authorizes funds"]
+
+    U -->|"Static HTTPS"| WEB
+    U -->|"OIDC login"| ID
+    U -->|"HTTPS / WSS"| EDGE
+    EDGE -->|"HTTPS - API and gateway ports only"| APP
+    APP <-->|"API / trading transactions<br/>Projector event reads"| DB
+    APP -->|"Projector IAM role"| VIEW
+    APP <-->|"Public snapshots / updates"| CACHE
+    DB -->|"Committed outbox"| BR
+    BR -->|"Queue publication"| Q
+    Q -->|"Trading / projection wake-ups"| APP
+    SECRETS -.->|"Startup + refresh"| APP
+    CI -.->|"Approved task definitions / roles"| APP
+    APP -->|"Reconciled audit append / async telemetry"| LOG
+    LOG -.->|"Evidence / detection"| OPS
+    DB -.->|"Scheduled cross-account / Region copy"| BACKUP
+    DB -.->|"Retained financial contract"| KEEP
+
+    classDef hardened fill:#fff4df,stroke:#b45309,color:#78350f,stroke-width:2px;
+    classDef added fill:#e8f6ed,stroke:#15803d,color:#14532d,stroke-width:2px;
+    classDef kept fill:#e8f0fe,stroke:#2563eb,color:#172554,stroke-width:2px;
+    classDef external fill:#f8fafc,stroke:#64748b,color:#0f172a;
+    class WEB,ID,EDGE,APP,CACHE,DB,VIEW,BR,Q,SECRETS hardened;
+    class CI,LOG,OPS,BACKUP added;
+    class KEEP kept;
+    class U external;

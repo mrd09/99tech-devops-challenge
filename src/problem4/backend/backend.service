@@ -1,0 +1,38 @@
+[Unit]
+Description=Ship It Twice backend
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=shipit-backend
+Group=shipit-backend
+WorkingDirectory=/opt/shipit/backend/current
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=SECRETS_FILE=/run/shipit-backend/runtime.json
+RuntimeDirectory=shipit-backend
+RuntimeDirectoryMode=0750
+ExecStartPre=+/usr/local/libexec/shipit-fetch-secret
+# Read metadata as data; never source a release-controlled shell env file.
+ExecStart=/usr/bin/node --max-old-space-size=384 /opt/shipit/backend/current/launcher.cjs
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=60
+TimeoutStopSec=30
+KillSignal=SIGTERM
+MemoryMax=512M
+TasksMax=128
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/shipit-backend
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+{
+  "applicationName": "shipit-backend",
+  "deploymentGroupName": "backend-ENVIRONMENT",
+  "serviceRoleArn": "arn:aws:iam::ACCOUNT_ID:role/codedeploy-service",
+  "autoScalingGroups": ["backend-ENVIRONMENT"],
+  "deploymentConfigName": "CodeDeployDefault.OneAtATime",
+  "deploymentStyle": {
+    "deploymentType": "IN_PLACE",
+    "deploymentOption": "WITH_TRAFFIC_CONTROL"
+  },
+  "loadBalancerInfo": {
+    "targetGroupInfoList": [{"name": "backend-ENVIRONMENT"}]
+  },
+  "alarmConfiguration": {
+    "enabled": true,
+    "ignorePollAlarmFailure": false,
+    "alarms": [
+      {"name": "backend-ENVIRONMENT-unhealthy-targets"},
+      {"name": "backend-ENVIRONMENT-5xx"}
+    ]
+  },
+  "autoRollbackConfiguration": {
+    "enabled": true,
+    "events": ["DEPLOYMENT_FAILURE", "DEPLOYMENT_STOP_ON_ALARM", "DEPLOYMENT_STOP_ON_REQUEST"]
+  }
+}

@@ -1,0 +1,10 @@
+flowchart TB
+    C[Release coordinator] --> B[Build backend: checks and package]
+    C --> F[Build frontend: checks and package]
+    B --> G{Deploy allowed?}
+    F --> G
+    G -->|No: PR or disabled| END[CI only; no AWS deployment]
+    G -->|Yes| BS[Deploy backend staging]
+    BS --> FS[Deploy frontend staging]
+    FS --> BP[Approve and deploy backend production]
+    BP --> FP[Approve and deploy frontend production]

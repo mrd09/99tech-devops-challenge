@@ -1,0 +1,52 @@
+name: Problem 4 reusable backend build
+
+on:
+  workflow_call:
+    outputs:
+      artifact:
+        description: Checksummed backend artifact from this release run
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+    outputs:
+      artifact: ${{ steps.identity.outputs.artifact }}
+    steps:
+      - name: Name the immutable artifact
+        id: identity
+        run: echo "artifact=backend-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check required application interface
+        run: python3 tasks/problem4/scripts/package.py contract backend
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/backend/package-lock.json
+      - name: Install, check, audit and build
+        working-directory: apps/backend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm audit --audit-level=high
+          npm run build
+          npm prune --omit=dev --ignore-scripts
+          npm sbom --sbom-format cyclonedx --omit=dev > sbom.json
+      - name: Package once
+        run: python3 tasks/problem4/scripts/package.py build backend
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ steps.identity.outputs.artifact }}
+          path: output/backend/*
+          if-no-files-found: error
+          retention-days: 30

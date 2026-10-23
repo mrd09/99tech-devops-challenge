@@ -1,0 +1,70 @@
+sequenceDiagram
+    autonumber
+    actor C as Browser client
+    participant A as Trading API (ECS)
+    participant D as DynamoDB
+    participant O as Streams / Lambda
+    participant Q as SQS queues
+    participant W as Matching / settlement (ECS)
+    participant P as Projection / audit (ECS)
+    participant F as Valkey / WS gateways
+
+    rect rgb(232, 240, 254)
+        Note over C,D: Synchronous acceptance: p99 target below 100 ms, not a measured result
+        C->>A: HTTPS place/cancel with account-scoped idempotency key
+        A->>A: Verify identity, ownership, rules and risk limits
+        Note over A,D: A known key returns its stored result after request-hash verification
+        A->>D: Conditional transaction: reserve for new order, command, order state, sequence, idempotency and outbox
+        alt Commit confirmed
+            D-->>A: Durable command and reservation/state
+            A-->>C: 202 Accepted with command ID
+        else Declined, retry limit or ambiguous timeout
+            A-->>C: No acceptance claim, retry/retrieve with the same key
+        end
+    end
+
+    opt Command committed, including a commit recovered after timeout
+        rect rgb(231, 246, 237)
+            Note over D,W: Asynchronous execution with separate processing and freshness targets
+            D-->>O: Command outbox stream record
+            O->>Q: Publish command wake-up at least once
+            Note over D,Q: Scheduled repair re-drives retained outbox beyond Streams' 24-hour retention
+            Q->>W: Command wake-up with possible duplicates and reordering
+            W->>D: Acquire owner epoch, strongly read next command, progress and price/time book
+            D-->>W: Authoritative ordered work and book state
+            Note over D,W: Database sequence defines priority with one fenced owner per market
+            loop Until the head command completes
+                W->>D: Guarded transaction: fill/rest/cancel, balances, ledger, book, progress and events
+                alt Ownership and state conditions hold
+                    D-->>W: Commit bounded progress or terminal command state
+                else Conflict or stale ownership
+                    D-->>W: Reject mutation, reload under valid ownership or stop
+                end
+            end
+            Note over D,W: Next command waits for head completion. A replacement resumes durable progress under a new epoch
+        end
+
+        rect rgb(255, 243, 224)
+            D-->>O: Committed financial/event outbox record
+            O->>Q: Publish to the separate event queue
+            Q->>P: Event wake-up
+            P->>D: Read committed event sequence, deduplicate and repair gaps
+            D-->>P: Events after the durable projection checkpoint
+            P->>D: Persist separate public aggregates and projection checkpoint
+            P->>F: Refresh versioned public views and publish updates
+            F-->>C: WSS public book/trade/candle updates
+            Note over P,F: Public delivery has no financial-write permissions. Audit workers reconcile/export separately
+        end
+    end
+
+    opt Private status query or recovery after a delivery gap
+        C->>A: HTTPS order/balance query or public resnapshot
+        alt Authoritative private state
+            A->>D: Strong base-table or transactional read
+            D-->>A: Committed order/balance state
+        else Public snapshot
+            A->>F: Request versioned public snapshot
+            F-->>A: Current view or explicit unavailable response
+        end
+        A-->>C: Query result, resume public updates from snapshot version
+    end

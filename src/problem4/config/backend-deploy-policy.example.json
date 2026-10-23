@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketVersioning"],
+      "Resource": "arn:aws:s3:::ARTIFACT_BUCKET"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": "arn:aws:s3:::ARTIFACT_BUCKET/backend/backend-ENVIRONMENT/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["codedeploy:CreateDeployment", "codedeploy:GetDeploymentGroup", "codedeploy:GetDeployment", "codedeploy:UpdateDeploymentGroup"],
+      "Resource": "arn:aws:codedeploy:REGION:ACCOUNT_ID:deploymentgroup:shipit-backend/backend-ENVIRONMENT"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["codedeploy:GetApplicationRevision", "codedeploy:RegisterApplicationRevision"],
+      "Resource": "arn:aws:codedeploy:REGION:ACCOUNT_ID:application:shipit-backend"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "codedeploy:GetDeploymentConfig",
+      "Resource": "arn:aws:codedeploy:REGION:ACCOUNT_ID:deploymentconfig:CodeDeployDefault.OneAtATime"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "codedeploy:StopDeployment",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "REGION"}}
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+version: 0.0
+os: linux
+files:
+  - source: payload/
+    destination: /opt/shipit/backend/incoming
+file_exists_behavior: OVERWRITE
+hooks:
+  BeforeInstall:
+    - location: hooks/preflight.sh
+      timeout: 60
+      runas: root
+  AfterInstall:
+    - location: hooks/install.sh
+      timeout: 180
+      runas: root
+  ApplicationStart:
+    - location: hooks/start.sh
+      timeout: 90
+      runas: root
+  ValidateService:
+    - location: hooks/validate.sh
+      timeout: 90
+      runas: root

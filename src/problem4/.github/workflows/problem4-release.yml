@@ -1,0 +1,78 @@
+# DEMO: GitHub will discover this only if all five files are copied to the
+# repository-root .github/workflows. Local uses paths below describe that layout.
+name: Problem 4 coordinated release
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['apps/backend/**', 'apps/frontend/**', '.github/workflows/problem4-*', 'tasks/problem4/**']
+  push:
+    branches: [main]
+    paths: ['apps/backend/**', 'apps/frontend/**', '.github/workflows/problem4-*', 'tasks/problem4/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One queue protects the whole application pair, including approval waits.
+concurrency:
+  group: problem4-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-backend:
+    name: Build backend artifact
+    uses: ./.github/workflows/problem4-build-backend.yml
+
+  build-frontend:
+    name: Build frontend artifact
+    uses: ./.github/workflows/problem4-build-frontend.yml
+
+  deploy-backend-staging:
+    name: Deploy backend to staging
+    needs: [build-backend, build-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PROBLEM4_DEPLOY_ENABLED == 'true'
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/problem4-deploy-backend.yml
+    with:
+      environment: backend-staging
+      artifact: ${{ needs.build-backend.outputs.artifact }}
+
+  deploy-frontend-staging:
+    name: Deploy frontend to staging
+    needs: [build-frontend, deploy-backend-staging]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/problem4-deploy-frontend.yml
+    with:
+      environment: frontend-staging
+      artifact: ${{ needs.build-frontend.outputs.artifact }}
+
+  deploy-backend-production:
+    name: Deploy backend to production
+    needs: [build-backend, deploy-frontend-staging]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/problem4-deploy-backend.yml
+    with:
+      environment: backend-production
+      artifact: ${{ needs.build-backend.outputs.artifact }}
+
+  deploy-frontend-production:
+    name: Deploy frontend to production
+    needs: [build-frontend, deploy-backend-production]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/problem4-deploy-frontend.yml
+    with:
+      environment: frontend-production
+      artifact: ${{ needs.build-frontend.outputs.artifact }}
